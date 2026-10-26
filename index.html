@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Here it is</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 28rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.4; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    p { color: #444; }
+    button { font-size: 1rem; padding: 0.75rem 1.25rem; border: 0; border-radius: 8px; background: #12285A; color: #fff; cursor: pointer; width: 100%; }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    #out { margin-top: 1.25rem; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; display: none; white-space: pre-wrap; }
+    #err { color: #b00020; margin-top: 1rem; display: none; }
+    a.map { display: inline-block; margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  <h1>Here it is</h1>
+  <p>Tap below. Your browser will ask to use your location, then the address shows here.</p>
+  <button id="btn" type="button">Here it is</button>
+  <div id="err"></div>
+  <div id="out"></div>
+  <script>
+    const btn = document.getElementById("btn");
+    const out = document.getElementById("out");
+    const err = document.getElementById("err");
+
+    function showError(msg) {
+      err.style.display = "block";
+      err.textContent = msg;
+      btn.disabled = false;
+      btn.textContent = "Here it is";
+    }
+
+    btn.addEventListener("click", () => {
+      err.style.display = "none";
+      out.style.display = "none";
+      if (!navigator.geolocation) {
+        showError("This browser does not support location.");
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "Getting location…";
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        try {
+          const url = "https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" +
+            encodeURIComponent(lat) + "&longitude=" + encodeURIComponent(lon) + "&localityLanguage=en";
+          const res = await fetch(url);
+          if (!res.ok) throw new Error("lookup failed");
+          const data = await res.json();
+          const parts = [
+            data.locality || data.city || "",
+            data.principalSubdivision || "",
+            data.postcode || "",
+            data.countryName || ""
+          ].filter(Boolean);
+          const line1 = [data.localityInfo && data.localityInfo.informative
+            ? (data.localityInfo.informative.find(x => x.order === 6 || x.description && /road|street|avenue|lane|close|way/i.test(x.description || x.name || "")) || {}).name
+            : null].filter(Boolean)[0];
+          const address = [line1, ...parts].filter(Boolean).join(", ") || (lat.toFixed(5) + ", " + lon.toFixed(5));
+          const maps = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lon);
+          out.style.display = "block";
+          out.innerHTML = "<strong>Approximate address</strong>\n" +
+            address.replace(/</g, "&lt;") +
+            "\n\nLat " + lat.toFixed(5) + ", Lon " + lon.toFixed(5) +
+            '\n<a class="map" href="' + maps + '" target="_blank" rel="noopener">Open in Google Maps</a>';
+          btn.disabled = false;
+          btn.textContent = "Here it is";
+        } catch (e) {
+          const maps = "https://www.google.com/maps?q=" + encodeURIComponent(lat + "," + lon);
+          out.style.display = "block";
+          out.innerHTML = "<strong>Location found</strong>\nLat " + lat.toFixed(5) + ", Lon " + lon.toFixed(5) +
+            '\n<a class="map" href="' + maps + '" target="_blank" rel="noopener">Open in Google Maps</a>';
+          btn.disabled = false;
+          btn.textContent = "Here it is";
+        }
+      }, (e) => {
+        if (e.code === 1) showError("Location permission was denied. Allow location for this site and try again.");
+        else if (e.code === 2) showError("Location unavailable. Try again outdoors or with Wi‑Fi on.");
+        else showError("Timed out getting location. Try again.");
+      }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    });
+  </script>
+</body>
+</html>
